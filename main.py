@@ -3,23 +3,37 @@ import requests
 import argparse
 import logging
 
+# Setup basic logging
+logging.basicConfig(level=logging.INFO)
+
 def main():
     parser = argparse.ArgumentParser(description='url for a github repo.')
-    parser.add_argument('URL',nargs='?', type=str, help='GitHub URL')
+    parser.add_argument('URL', nargs='?', type=str, help='GitHub URL')
+    parser.add_argument('debug', nargs='?', type=bool, help='debug flag')
     args = parser.parse_args()
 
-    # handy links for testing
-    star_url =  "https://github.com/sunfounder/SunFounder_PiCar-V"
-    starless_url = "https://github.com/SimeonKraev/UnInspired"
-    
-    base_url = f"https://api.github.com/repos/{user}/{repo}/stargazers"
-    headers={"Accept": "application/vnd.github.v3.star+json"}
-    params = {"per_page": 100}
+    # bool, if True, dont save dataset
+    debug_flag = args.debug if args.debug is not None else False
 
-    url = "https://github.com/sunfounder/SunFounder_PiCar-V"#args.URL
+    if args.URL is not None:
+        url = args.URL
+    else:
+        logging.error("Something went wrong with the provided URL.")
+        exit(1)
+
+    if url.endswith("/"):
+        url = url[:-1]
 
     user = url.split("/")[-2]
     repo = url.split("/")[-1]
+    
+    # header needed to get the timestamp of the star i.e "starred_at"
+    base_url = f"https://api.github.com/repos/{user}/{repo}/stargazers"
+    headers = {"Accept": "application/vnd.github.v3.star+json"}
+    params = {"per_page": 100}
+
+    list_stargazers = []
+    page = 1
 
     list_stargazers = []
     page = 1
