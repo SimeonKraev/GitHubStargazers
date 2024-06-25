@@ -35,21 +35,20 @@ def main():
     list_stargazers = []
     page = 1
 
-    list_stargazers = []
-    page = 1
     with requests.Session() as session:
         session.headers.update(headers)
 
         while True:
-            params['page'] = page 
+            params['page'] = page  # Update the page parameter for each request
             response = session.get(base_url, params=params)
 
+            # Check for rate limiting before proceeding
             if response.status_code == 403 and 'rate limit' in response.text.lower():
                 logging.error("Rate limit reached. Please try again later.")
                 break
             try:
                 page_data = response.json()
-                if not page_data:
+                if not page_data:  # with multiple pages, the last page will return an empty list
                     break
                 list_stargazers.extend(page_data)
                 page += 1
@@ -57,10 +56,14 @@ def main():
                 logging.error(f"Failed because: {e}.")
                 exit(1)
 
+    if not list_stargazers:
+        logging.error(f"No stars found for this repo - {repo}.")
+        exit(1)
 
-    usr_info = ["starred_at", "login", "id", "node_id", "url", "followers_url", "subscriptions_url",
-                     "organizations_url", "repos_url", "type", "site_admin"]
+    # stargarzers cols we are interested in
+    usr_info = ["starred_at", "login", "type", "site_admin"]
 
+    # data_rows - Create a list of dicts{"starred_at": date,...}
     data_rows = []
     for starred_user in list_stargazers:
         temp_dict = {"starred_at": starred_user.get("starred_at")}
@@ -68,9 +71,14 @@ def main():
         temp_dict.update({key: value for key, value in user_info.items() if key in usr_info})
         data_rows.append(temp_dict)
 
+    # create a dataframe, sort by date and save as .csv
     dataset = pd.DataFrame(data_rows)
-    print(dataset)
-    dataset.to_csv('stargazers_dataset.csv', index=False)
+    dataset['starred_at'] = pd.to_datetime(dataset['starred_at'])
+    dataset_sorted = dataset.sort_values(by='starred_at')
+    
+    # dont save dataset during unit tests
+    if not debug_flag:
+        dataset_sorted.to_csv(f'{repo}_stargazers_dataset.csv', index=False)
 
 if __name__ == "__main__":
     main()
