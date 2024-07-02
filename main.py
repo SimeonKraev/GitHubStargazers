@@ -1,19 +1,37 @@
-import pandas as pd
-import requests
-import argparse
+import sys
 import logging
+import argparse
+import unittest
+from flask import Flask, request, jsonify
+from src.methods.funcs import GitHubStargazers
+
+# Create a Flask app
+app = Flask(__name__)
 
 # Setup basic logging
 logging.basicConfig(level=logging.INFO)
 
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({"status": "healthy"}), 200
+
+@app.route('/star-history', methods=['GET'])
+def star_history():
+    """Get the star history for a GitHub repository."""
+    url = request.args.get('url')
+    if url is not None:
+        stargazers = GitHubStargazers(url, save_data=False)
+        stargazers.process_stargazers()
+        star_data = stargazers.fetch_star_history()
+        return jsonify(star_data)
+    else:
+        return jsonify({"error": "URL parameter is missing"}), 400
+
 def main():
     parser = argparse.ArgumentParser(description='url for a github repo.')
     parser.add_argument('URL', nargs='?', type=str, help='GitHub URL')
-    parser.add_argument('debug', nargs='?', type=bool, help='debug flag')
+    parser.add_argument('sava_data', nargs='?', type=bool, help='storage flag')
     args = parser.parse_args()
-
-    # bool, if True, dont save dataset
-    debug_flag = args.debug if args.debug is not None else False
 
     if args.URL is not None:
         url = args.URL
@@ -21,64 +39,16 @@ def main():
         logging.error("Something went wrong with the provided URL.")
         exit(1)
 
-    if url.endswith("/"):
-        url = url[:-1]
+    # bool, if True, save dataset
+    save_data_flag = args.sava_data if args.sava_data is not None else False
 
-    user = url.split("/")[-2]
-    repo = url.split("/")[-1]
-    
-    # header needed to get the timestamp of the star i.e "starred_at"
-    base_url = f"https://api.github.com/repos/{user}/{repo}/stargazers"
-    headers = {"Accept": "application/vnd.github.v3.star+json"}
-    params = {"per_page": 100}
-
-    list_stargazers = []
-    page = 1
-
-    with requests.Session() as session:
-        session.headers.update(headers)
-
-        while True:
-            params['page'] = page  # Update the page parameter for each request
-            response = session.get(base_url, params=params)
-
-            # Check for rate limiting before proceeding
-            if response.status_code == 403 and 'rate limit' in response.text.lower():
-                logging.error("Rate limit reached. Please try again later.")
-                break
-            try:
-                page_data = response.json()
-                if not page_data:  # with multiple pages, the last page will return an empty list
-                    break
-                list_stargazers.extend(page_data)
-                page += 1
-            except ValueError as e:
-                logging.error(f"Failed because: {e}.")
-                exit(1)
-
-    if not list_stargazers:
-        logging.error(f"No stars found for this repo - {repo}.")
-        exit(1)
-
-    # stargarzers cols we are interested in
-    usr_info = ["starred_at", "login", "type", "site_admin"]
-
-    # data_rows - Create a list of dicts{"starred_at": date,...}
-    data_rows = []
-    for starred_user in list_stargazers:
-        temp_dict = {"starred_at": starred_user.get("starred_at")}
-        user_info = starred_user.get("user", {})
-        temp_dict.update({key: value for key, value in user_info.items() if key in usr_info})
-        data_rows.append(temp_dict)
-
-    # create a dataframe, sort by date and save as .csv
-    dataset = pd.DataFrame(data_rows)
-    dataset['starred_at'] = pd.to_datetime(dataset['starred_at'])
-    dataset_sorted = dataset.sort_values(by='starred_at')
-    
-    # dont save dataset during unit tests
-    if not debug_flag:
-        dataset_sorted.to_csv(f'{repo}_stargazers_dataset.csv', index=False)
+    stargazers = GitHubStargazers(url, save_data=save_data_flag)
+    stargazers.process_stargazers()
+    stargazers.plot_stars()
 
 if __name__ == "__main__":
-    main()
+    unittest.main(module='tests.tests', exit=False)
+    if len(sys.argv) > 1:
+        main()
+    else:
+        app.run(debug=True)
