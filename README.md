@@ -26,8 +26,6 @@ This class provides a comprehensive tool for analyzing the popularity and growth
 
 ## Endpoints
 
-## Endpoints
-
 ### Health Check Endpoint
 - **Path**: `/health`
 - **Method**: `GET`
